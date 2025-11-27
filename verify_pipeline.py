@@ -50,7 +50,7 @@ ingest_agent = Agent(
     """,
     tools=[ingest_multimedia_tool]
 )
-ingest_runner = InMemoryRunner(agent=ingest_agent)
+ingest_runner = InMemoryRunner(agent=ingest_agent, app_name="agents")
 
 analyst_agent = Agent(
     model='gemini-pro-latest',
@@ -61,7 +61,7 @@ analyst_agent = Agent(
     Salida esperada: Lista de hechos.
     """
 )
-analyst_runner = InMemoryRunner(agent=analyst_agent)
+analyst_runner = InMemoryRunner(agent=analyst_agent, app_name="agents")
 
 tech_writer_agent = Agent(
     model='gemini-pro-latest',
@@ -71,7 +71,7 @@ tech_writer_agent = Agent(
     Eres el TechWriterAgent. Genera un documento Markdown.
     """
 )
-tech_writer_runner = InMemoryRunner(agent=tech_writer_agent)
+tech_writer_runner = InMemoryRunner(agent=tech_writer_agent, app_name="agents")
 
 # --- PIPELINE ---
 async def run_pipeline():
