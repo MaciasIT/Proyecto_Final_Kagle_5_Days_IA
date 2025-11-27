@@ -1,0 +1,11 @@
+
+        [VIDEO TRANSCRIPT SIMULADO]
+        Admin: Vamos a configurar el servidor web Apache.
+        Admin: Primero, actualizamos los repositorios con 'sudo apt update'.
+        Admin: Ahora instalamos apache con 'sudo apt install apache2 -y'.
+        Admin: Verificamos el estado con 'systemctl status apache2'.
+        Admin: Oh, veo un error en el log, el puerto 80 está ocupado.
+        Admin: Vamos a cambiar el puerto en /etc/apache2/ports.conf a 8080.
+        Admin: Reiniciamos el servicio 'sudo systemctl restart apache2'.
+        Admin: Listo, funcionando en puerto 8080.
+        

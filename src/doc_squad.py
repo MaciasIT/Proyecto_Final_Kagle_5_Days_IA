@@ -44,7 +44,7 @@ def create_squad():
     
     # 1. INGEST AGENT
     ingest_agent = Agent(
-        model='gemini-1.5-flash-latest',
+        model='gemini-1.5-flash-001',
         name='IngestAgent',
         description="Gestiona la carga de archivos.",
         instruction="""
@@ -59,7 +59,7 @@ def create_squad():
 
     # 2. ANALYST AGENT
     analyst_agent = Agent(
-        model='gemini-1.5-pro-latest',
+        model='gemini-1.5-pro-001',
         name='AnalystAgent',
         description="Analiza contenido técnico y extrae hechos.",
         instruction="""
@@ -80,7 +80,7 @@ def create_squad():
 
     # 3. TECH WRITER AGENT
     tech_writer_agent = Agent(
-        model='gemini-1.5-pro-latest',
+        model='gemini-1.5-pro-001',
         name='TechWriterAgent',
         description="Genera documentación final.",
         instruction="""

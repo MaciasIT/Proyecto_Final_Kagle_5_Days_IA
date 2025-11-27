@@ -40,7 +40,7 @@ def ingest_multimedia_tool(file_path: str) -> str:
 
 # --- AGENTS ---
 ingest_agent = Agent(
-    model='gemini-flash-latest',
+    model='gemini-1.5-flash-001',
     name='IngestAgent',
     description="Gestiona la carga de archivos.",
     instruction="""
@@ -53,7 +53,7 @@ ingest_agent = Agent(
 ingest_runner = InMemoryRunner(agent=ingest_agent, app_name="agents")
 
 analyst_agent = Agent(
-    model='gemini-pro-latest',
+    model='gemini-1.5-pro-001',
     name='AnalystAgent',
     description="Analiza contenido técnico y extrae hechos.",
     instruction="""
@@ -64,7 +64,7 @@ analyst_agent = Agent(
 analyst_runner = InMemoryRunner(agent=analyst_agent, app_name="agents")
 
 tech_writer_agent = Agent(
-    model='gemini-pro-latest',
+    model='gemini-1.5-pro-001',
     name='TechWriterAgent',
     description="Genera documentación final.",
     instruction="""
