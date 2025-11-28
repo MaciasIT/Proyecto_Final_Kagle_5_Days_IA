@@ -1,5 +1,1 @@
-notebook
-google-adk
-google-generativeai
-python-dotenv
-streamlit
+nest_asyncio
