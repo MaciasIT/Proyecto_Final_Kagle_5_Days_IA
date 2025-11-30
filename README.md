@@ -19,6 +19,12 @@ En el dinámico mundo de la tecnología, la creación de documentación técnica
 
 **Doc Squad AI** es un sistema multi-agente inteligente diseñado para cerrar esta brecha. Automatiza la transformación de cualquier contenido multimedia técnico en documentación profesional y estructurada en Markdown, liberando a los equipos para que se centren en tareas de mayor valor.
 
+### 🎥 Video de Demostración
+
+[![Demostración de Doc Squad AI](https://img.youtube.com/vi/OQo0VdZ2U2Q/0.jpg)](https://www.youtube.com/watch?v=OQo0VdZ2U2Q)
+
+**[Ver la demostración en YouTube](https://youtu.be/OQo0VdZ2U2Q?si=1aAQ6gCyrlDxei-a)**
+
 ### 🏗️ Arquitectura "Doc Squad"
 
 Nuestro sistema simula un flujo de trabajo colaborativo con tres agentes especializados, orquestados por el **Google Agent Development Kit (ADK)** y potenciados por los modelos **Gemini 2.5**:
