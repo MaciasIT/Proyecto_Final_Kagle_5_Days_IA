@@ -226,12 +226,12 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
     return final_doc_response.text
 
 # --- WRAPPER SÍNCRONO PARA APP.PY ---
-async def run_documentation_pipeline(file_path: str, request_context: str = "", status_callback=None):
+def run_documentation_pipeline(file_path: str, request_context: str = "", status_callback=None):
     """
-    Wrapper asíncrono para ejecutar el pipeline async.
+    Wrapper síncrono para ejecutar el pipeline async.
     """
     try:
-        return await run_pipeline_async(file_path, request_context, status_callback)
+        return asyncio.run(run_pipeline_async(file_path, request_context, status_callback))
     except Exception as e:
         logger.critical(f"El pipeline falló con una excepción no controlada: {e}", exc_info=True)
         # Propagar la excepción para que el llamador sepa que algo salió mal

@@ -25,8 +25,8 @@ Este es el plan de trabajo para adaptar el proyecto a los requerimientos de la c
 
 ## Día 3: Bonus y Entrega
 
-- [ ] **5. Grabar Video de Demostración (Bonus):**
-  - [ ] Grabar un video corto (< 2 min) mostrando la aplicación Streamlit en acción.
+- [x] **5. Grabar Video de Demostración (Bonus):**
+  - [x] Grabar un video corto (< 2 min) mostrando la aplicación Streamlit en acción.
   - [ ] Subir el video a una plataforma pública (ej. YouTube, Google Drive).
 
 - [ ] **6. Revisión Final:**
