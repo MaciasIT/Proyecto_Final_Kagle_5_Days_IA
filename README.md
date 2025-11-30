@@ -201,7 +201,7 @@ Este proyecto es de código abierto y está disponible bajo la licencia MIT.
 
 -   [Kaggle](https://www.kaggle.com/) por el programa "Agents Intensive Capstone Project".
 -   [Google AI](https://ai.google.dev/) por Google ADK y Gemini API.
--   La comunidad de desarrolladores de IA.
+-   La comunidad de desarrolladores de IA
 
 ---
 
