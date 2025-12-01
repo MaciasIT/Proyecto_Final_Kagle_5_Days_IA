@@ -156,7 +156,7 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
         if status_callback:
             status_callback(msg)
 
-    async def run_agent_with_memory(current_agent, agent_name, prompt):
+    async def run_agent_with_memory(current_agent, agent_name, prompt, file_uri_parts=None):
         # Dynamically update the agent for the single runner instance
         runner.agent = current_agent
 
@@ -166,8 +166,18 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
         update_status(f"Iniciando tarea para {agent_name}...")
         
         collected_events = []
-        # Wrap the prompt in types.Content
-        new_message_content = types.Content(role='user', parts=[types.Part(text=full_prompt)])
+        
+        # Construir las partes del mensaje
+        parts = [types.Part(text=full_prompt)]
+        if file_uri_parts:
+            uri, mime_type = file_uri_parts
+            if uri and mime_type and "files/" in uri:
+                logger.info(f"Adjuntando archivo {uri} ({mime_type}) a la petición para {agent_name}.")
+                parts.append(types.Part.from_uri(uri=uri, mime_type=mime_type))
+            else:
+                logger.warning(f"Se intentó adjuntar un archivo pero el URI o mime_type no son válidos: {file_uri_parts}")
+
+        new_message_content = types.Content(role='user', parts=parts)
 
         async for event in runner.run_async(new_message=new_message_content, user_id=session.user_id, session_id=session.id):
             collected_events.append(event)
@@ -197,6 +207,8 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
             logger.error(f"No se recibieron eventos del agente {agent_name}.")
             raise Exception(f"No se recibió respuesta del agente {agent_name}.")
 
+import mimetypes
+
     update_status(f"🚀 Iniciando pipeline para: {os.path.basename(file_path)} (Sesión: {session_id})")
     
     # PASO 1: INGESTA
@@ -206,12 +218,27 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
         prompt=f"Sube y procesa el archivo: {file_path}"
     )
     
+    # Validar respuesta de la ingesta
+    ingest_uri = ingest_response.text
+    if "ERROR" in ingest_uri or "files/" not in ingest_uri:
+        update_status(f"Error en la ingesta: {ingest_uri}")
+        raise Exception(f"La ingesta del archivo falló: {ingest_uri}")
+
+    update_status(f"Archivo subido con éxito: {ingest_uri}")
+
     # PASO 2: ANÁLISIS
-    analysis_prompt = f"Aquí tienes el resultado de la ingesta: {ingest_response.text}. Contexto extra: {request_context}. Analiza los hechos técnicos."
+    # Determinar el mime_type del archivo original para la API
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        logger.warning(f"No se pudo determinar el mime_type para {file_path}. Usando 'application/octet-stream'.")
+        mime_type = 'application/octet-stream'
+
+    analysis_prompt = f"Contexto extra proporcionado: '{request_context}'. Analiza exhaustivamente el contenido del archivo adjunto y extrae todos los hechos técnicos clave como se describe en tus instrucciones."
     analysis_response = await run_agent_with_memory(
         current_agent=analyst_agent,
         agent_name="AnalystAgent",
-        prompt=analysis_prompt
+        prompt=analysis_prompt,
+        file_uri_parts=(ingest_uri, mime_type)
     )
 
     # PASO 3: REDACCIÓN
