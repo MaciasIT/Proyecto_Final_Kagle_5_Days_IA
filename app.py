@@ -77,7 +77,7 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.markdown("### 1. Sube tu archivo")
-    uploaded_file = st.file_uploader("Elige un video, audio o imagen", type=['mp4', 'webm', 'mp3', 'wav', 'png', 'jpg'])
+    uploaded_file = st.file_uploader("Elige un archivo multimedia o de texto", type=['mp4', 'webm', 'mp3', 'wav', 'png', 'jpg', 'pdf', 'txt'])
     
     context = st.text_area("Contexto adicional (Opcional)", 
                           placeholder="Ej: Este es un tutorial sobre cómo instalar Apache en Ubuntu...",

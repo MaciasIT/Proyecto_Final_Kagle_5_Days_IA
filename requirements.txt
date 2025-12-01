@@ -1,1 +1,7 @@
+google-adk
+google-generativeai
+python-dotenv
+fastapi
+uvicorn
+python-magic
 nest_asyncio

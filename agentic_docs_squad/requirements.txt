@@ -1,5 +1,0 @@
-google-adk
-google-generativeai
-python-dotenv
-fastapi
-uvicorn
