@@ -2,6 +2,7 @@ import os
 import time
 import asyncio
 import logging
+import mimetypes
 import google.generativeai as genai
 from google.adk.agents.llm_agent import Agent
 from google.adk.runners import InMemoryRunner
@@ -206,8 +207,6 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
         else:
             logger.error(f"No se recibieron eventos del agente {agent_name}.")
             raise Exception(f"No se recibió respuesta del agente {agent_name}.")
-
-import mimetypes
 
     update_status(f"🚀 Iniciando pipeline para: {os.path.basename(file_path)} (Sesión: {session_id})")
     
