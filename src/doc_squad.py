@@ -83,7 +83,7 @@ def create_agents():
         description="Gestiona la carga de archivos.",
         instruction="""
         Eres el IngestAgent. Tu único trabajo es recibir rutas de archivos locales y subirlos usando la herramienta 'ingest_multimedia_tool'.
-        Una vez tengas el URI, devuélvelo confirmando que está listo para análisis.
+        Una vez tengas el URI, devuelve SOLAMENTE el URI. No añadas texto adicional.
         Si la herramienta falla, reporta el error claramente.
         """,
         tools=[ingest_multimedia_tool]
@@ -174,7 +174,7 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
             uri, mime_type = file_uri_parts
             if uri and mime_type and "files/" in uri:
                 logger.info(f"Adjuntando archivo {uri} ({mime_type}) a la petición para {agent_name}.")
-                parts.append(types.Part.from_uri(uri=uri, mime_type=mime_type))
+                parts.append(types.Part.from_uri(file_uri=uri, mime_type=mime_type))
             else:
                 logger.warning(f"Se intentó adjuntar un archivo pero el URI o mime_type no son válidos: {file_uri_parts}")
 
@@ -218,7 +218,15 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
     )
     
     # Validar respuesta de la ingesta
-    ingest_uri = ingest_response.text
+    ingest_uri = ingest_response.text.strip()
+    
+    # Extraer URI si hay texto adicional (fallback)
+    import re
+    uri_match = re.search(r'(https://generativelanguage\.googleapis\.com/v1beta/files/[a-z0-9]+)', ingest_uri)
+    if uri_match:
+        ingest_uri = uri_match.group(1)
+        logger.info(f"URI extraído por regex: {ingest_uri}")
+
     if "ERROR" in ingest_uri or "files/" not in ingest_uri:
         update_status(f"Error en la ingesta: {ingest_uri}")
         raise Exception(f"La ingesta del archivo falló: {ingest_uri}")
