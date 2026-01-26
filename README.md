@@ -7,6 +7,8 @@
 
 **Proyecto Final - Kaggle Agents Intensive Capstone Project**
 
+https://doc-squad-ai.streamlit.app/
+
 ## 💡 El Problema: La Brecha entre Contenido Multimedia y Documentación Técnica
 
 En el dinámico mundo de la tecnología, la creación de documentación técnica precisa y actualizada a partir de fuentes multimedia (videos de tutoriales, grabaciones de sesiones, audios de conferencias, capturas de pantalla) es un desafío constante. Los ingenieros y equipos de soporte a menudo dedican horas a transcribir, analizar y estructurar manualmente esta información, un proceso que es:
