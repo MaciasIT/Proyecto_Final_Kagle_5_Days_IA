@@ -49,16 +49,22 @@ with st.sidebar:
     
     # API Key management
     load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
+    env_api_key = os.getenv("GOOGLE_API_KEY")
     
-    if not api_key:
-        user_api_key = st.text_input("Google API Key", type="password", help="Introduce tu API Key de Google AI Studio")
-        if user_api_key:
-            os.environ["GOOGLE_API_KEY"] = user_api_key
-            genai.configure(api_key=user_api_key)
-            st.success("API Key configurada!")
+    # Prioridad: 1. Input del usuario (Session State), 2. Variable de entorno
+    if "user_api_key" not in st.session_state:
+        st.session_state.user_api_key = None
+
+    if not env_api_key:
+        input_key = st.text_input("Google API Key", type="password", help="Introduce tu API Key de Google AI Studio")
+        if input_key:
+            st.session_state.user_api_key = input_key
+            st.success("API Key configurada para esta sesión!")
     else:
-        st.success("✅ API Key detectada en .env")
+        st.success("✅ API Key detectada en el servidor")
+        st.session_state.user_api_key = env_api_key
+
+    active_api_key = st.session_state.user_api_key
 
     st.markdown("---")
     st.markdown("### 🤖 Doc Squad")
@@ -90,7 +96,7 @@ with col2:
     output_container = st.empty()
     
     if generate_btn and uploaded_file:
-        if not os.getenv("GOOGLE_API_KEY"):
+        if not active_api_key:
             st.error("⚠️ Por favor configura tu Google API Key en la barra lateral.")
         else:
             # Guardar archivo temporalmente
@@ -116,7 +122,7 @@ with col2:
                             st.write(msg)
 
                 with st.spinner('El Doc Squad está trabajando... Esto puede tardar unos minutos.'):
-                    final_doc = run_documentation_pipeline(tmp_path, context, status_callback=update_ui_status)
+                    final_doc = run_documentation_pipeline(tmp_path, context, api_key=active_api_key, status_callback=update_ui_status)
                 
                 # Mostrar resultado final (Seguro: sin unsafe_allow_html para el contenido de la IA)
                 output_container.markdown(final_doc)

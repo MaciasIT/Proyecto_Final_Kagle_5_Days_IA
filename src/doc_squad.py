@@ -36,7 +36,7 @@ logger = setup_logging()
 # Cargar variables de entorno
 load_dotenv()
 
-# Configurar API Key si existe
+# Configurar API Key si existe (Solo carga inicial, se prefiere paso explícito)
 if os.getenv("GOOGLE_API_KEY"):
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
@@ -129,7 +129,10 @@ def create_agents():
     return ingest_agent, analyst_agent, tech_writer_agent
 
 # --- PIPELINE FUNCTION (ASYNC) ---
-async def run_pipeline_async(file_path: str, request_context: str, status_callback=None):
+async def run_pipeline_async(file_path: str, request_context: str, api_key: str = None, status_callback=None):
+    if api_key:
+        genai.configure(api_key=api_key)
+    
     user_id = "default_user" # Define a user_id
     session_id = f"session_{int(time.time())}" # Generate a unique session_id
     
@@ -258,13 +261,13 @@ async def run_pipeline_async(file_path: str, request_context: str, status_callba
     return final_doc_response.text
 
 # --- WRAPPER SÍNCRONO PARA APP.PY ---
-def run_documentation_pipeline(file_path: str, request_context: str = "", status_callback=None):
+def run_documentation_pipeline(file_path: str, request_context: str = "", api_key: str = None, status_callback=None):
     """
     Wrapper síncrono para ejecutar el pipeline async.
     """
     nest_asyncio.apply() # Aplicar aquí para no interferir con el socket principal de Streamlit al inicio
     try:
-        return asyncio.run(run_pipeline_async(file_path, request_context, status_callback))
+        return asyncio.run(run_pipeline_async(file_path, request_context, api_key, status_callback))
     except Exception as e:
         logger.critical(f"El pipeline falló con una excepción no controlada: {e}", exc_info=True)
         # Propagar la excepción para que el llamador sepa que algo salió mal
