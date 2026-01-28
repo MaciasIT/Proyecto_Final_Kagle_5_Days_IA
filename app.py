@@ -4,7 +4,13 @@ import tempfile
 import google.generativeai as genai
 import nest_asyncio
 from dotenv import load_dotenv
-from src.doc_squad import run_documentation_pipeline
+try:
+    from src.doc_squad import run_documentation_pipeline
+except ImportError:
+    # Fallback para diferentes estructuras de carpetas en Streamlit Cloud
+    import sys
+    sys.path.append(os.path.join(os.getcwd(), "src"))
+    from doc_squad import run_documentation_pipeline
 
 # Configuración de compatibilidad asíncrona para Streamlit
 nest_asyncio.apply()
