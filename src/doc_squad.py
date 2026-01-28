@@ -15,7 +15,7 @@ nest_asyncio.apply()
 
 # --- LOGGING SETUP ---
 def setup_logging():
-    """Configura un logging dual: a consola y a un archivo."""
+    """Configura un logging a consola únicamente (Streamlit Cloud captura stdout)."""
     log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(name)s] - %(message)s')
     
     # Logger principal
@@ -24,12 +24,7 @@ def setup_logging():
     
     # Evitar duplicación de handlers si se llama varias veces
     if not logger.handlers:
-        # Handler para el archivo
-        file_handler = logging.FileHandler("doc_squad.log")
-        file_handler.setFormatter(log_formatter)
-        logger.addHandler(file_handler)
-        
-        # Handler para la consola
+        # Handler para la consola (capturado por logs de Streamlit Cloud)
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(log_formatter)
         logger.addHandler(console_handler)
