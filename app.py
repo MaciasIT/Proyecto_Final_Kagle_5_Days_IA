@@ -118,7 +118,7 @@ with col2:
                 with st.spinner('El Doc Squad está trabajando... Esto puede tardar unos minutos.'):
                     final_doc = run_documentation_pipeline(tmp_path, context, status_callback=update_ui_status)
                 
-                # Mostrar resultado final
+                # Mostrar resultado final (Seguro: sin unsafe_allow_html para el contenido de la IA)
                 output_container.markdown(final_doc)
                 
                 # Botón de descarga
@@ -130,10 +130,11 @@ with col2:
                 )
                 
             except Exception as e:
-                st.error(f"Ocurrió un error: {str(e)}")
+                # Sanitizar el mensaje de error antes de mostrarlo
+                st.error(f"Ocurrió un error: {str(e).replace('<', '&lt;')}")
             finally:
                 # Limpiar archivo temporal
-                if os.path.exists(tmp_path):
+                if 'tmp_path' in locals() and os.path.exists(tmp_path):
                     os.remove(tmp_path)
 
     elif not uploaded_file:

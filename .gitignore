@@ -159,6 +159,11 @@ $RECYCLE.BIN/
 *~
 
 # --- Project Specific ---
+# Secretos y Configuración (Importante: Bloqueo de Git)
+kaggle.json
+.env
+*.log
+
 # Archivos de inspección/debug (ya eliminados del repo)
 *_dir.txt
 *_help.txt
