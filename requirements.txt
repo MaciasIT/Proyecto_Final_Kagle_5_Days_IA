@@ -4,5 +4,3 @@ google-generativeai
 python-dotenv
 python-magic
 nest_asyncio
-fastapi
-uvicorn

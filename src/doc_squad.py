@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from google.genai import types
 import nest_asyncio
 
-# nest_asyncio.apply()  <-- Movido a la función de entrada para evitar conflictos en el arranque global
+# nest_asyncio.apply()  <-- Removido, ahora se aplica en app.py
 
 # --- LOGGING SETUP ---
 def setup_logging():
@@ -265,7 +265,7 @@ def run_documentation_pipeline(file_path: str, request_context: str = "", api_ke
     """
     Wrapper síncrono para ejecutar el pipeline async.
     """
-    nest_asyncio.apply() # Aplicar aquí para no interferir con el socket principal de Streamlit al inicio
+    # nest_asyncio.apply() ahora se aplica en app.py
     try:
         return asyncio.run(run_pipeline_async(file_path, request_context, api_key, status_callback))
     except Exception as e:

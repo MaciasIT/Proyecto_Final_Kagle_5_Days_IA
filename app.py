@@ -1,9 +1,13 @@
 import streamlit as st
 import os
 import tempfile
+import google.generativeai as genai
+import nest_asyncio
 from dotenv import load_dotenv
 from src.doc_squad import run_documentation_pipeline
-import google.generativeai as genai
+
+# Configuración de compatibilidad asíncrona para Streamlit
+nest_asyncio.apply()
 
 # Configuración de la página
 st.set_page_config(
