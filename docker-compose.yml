@@ -1,0 +1,16 @@
+services:
+  doc-squad:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: doc-squad-v2:latest
+    container_name: doc-squad-v2
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    volumes:
+      - ./test_data:/app/test_data:ro

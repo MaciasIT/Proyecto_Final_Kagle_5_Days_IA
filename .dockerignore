@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov/
+*.gemini_cache
+kaggle.json
+viewer_demo.html
+viewer_demo.png
+.env
