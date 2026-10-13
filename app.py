@@ -64,6 +64,7 @@ with st.sidebar:
     st.markdown("### 🤖 Doc Squad")
     st.markdown("- **IngestAgent**: Procesa multimedia")
     st.markdown("- **AnalystAgent**: Extrae datos técnicos")
+    st.markdown("- **ValidatorAgent**: Valida sintaxis y coherencia")
     st.markdown("- **TechWriterAgent**: Escribe documentación")
     
     st.markdown("---")
@@ -108,6 +109,10 @@ with col2:
                             st.info(msg, icon="📥")
                         elif "AnalystAgent" in msg:
                             st.info(msg, icon="🧠")
+                        elif "ValidatorAgent" in msg and "🔁" in msg:
+                            st.warning(msg, icon="🔍")
+                        elif "ValidatorAgent" in msg:
+                            st.info(msg, icon="🔍")
                         elif "TechWriterAgent" in msg:
                             st.info(msg, icon="✍️")
                         elif "✅" in msg:

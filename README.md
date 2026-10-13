@@ -15,10 +15,13 @@ Este proyecto implementa una arquitectura de **Agentes Colaborativos** llamada "
 ### 🏗️ Arquitectura "Doc Squad"
 
 ```
-┌─────────────────┐      ┌──────────────────┐      ┌─────────────────────┐
-│  IngestAgent    │ ───▶ │  AnalystAgent    │ ───▶ │  TechWriterAgent    │
-│ (El Bibliotecario)│      │ (El Ingeniero)   │      │  (El Redactor)      │
-└─────────────────┘      └──────────────────┘      └─────────────────────┘
+┌─────────────────┐      ┌──────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
+│  IngestAgent    │ ───▶ │  AnalystAgent    │ ───▶ │  ValidatorAgent     │ ───▶ │  TechWriterAgent    │
+│ (El Bibliotecario)│     │ (El Ingeniero)   │ ─┐   │  (El Crítico)       │      │  (El Redactor)      │
+└─────────────────┘      └──────────────────┘  │   └─────────────────────┘      └─────────────────────┘
+                                               │            ▲  │
+                                               └────────────┘  └─ bucle de refinamiento (hasta 3 iteraciones)
+                                                  si hay problemas
 ```
 
 1. **IngestAgent (El Bibliotecario)**
@@ -31,8 +34,13 @@ Este proyecto implementa una arquitectura de **Agentes Colaborativos** llamada "
    - Extrae hechos puros: comandos, errores, topología de red, configuraciones
    - Genera una lista cronológica de acciones técnicas
 
-3. **TechWriterAgent (El Redactor)**
-   - Toma los hechos extraídos y genera documentación profesional
+3. **ValidatorAgent (El Crítico)**
+   - Comprueba la sintaxis de comandos (bash, docker, python) de forma determinista
+   - Detecta inconsistencias técnicas (comandos incorrectos para el SO, pasos contradictorios)
+   - Fuerza un bucle de refinamiento con el AnalystAgent antes de redactar el documento final
+
+4. **TechWriterAgent (El Redactor)**
+   - Toma los hechos validados y genera documentación profesional
    - Aplica formato Markdown con estructura estándar
    - Añade advertencias, notas y bloques de código
 
@@ -165,6 +173,13 @@ Proyecto_Kagle/
 ├── verify_pipeline.py                 # Script de verificación del pipeline
 ├── list_models.py                     # Utilidad para listar modelos disponibles
 │
+├── src/                               # Código fuente
+│   ├── doc_squad.py                   # Definición de agentes y pipeline
+│   └── validator.py                   # ValidatorAgent: sintaxis + crítico
+│
+├── tests/                             # Tests unitarios
+│   └── test_validator.py              # Tests de validación de sintaxis
+│
 └── test_data/                         # Datos de prueba
     ├── sample_video.mp4               # Video de ejemplo
     ├── sudo_pacman_update.webm        # Video de actualización de paquetes
@@ -194,6 +209,14 @@ El proyecto incluye varios niveles de testing:
 1. **Demo Simulada** (`project_notebook.ipynb`): Usa un archivo de texto simulando un transcript
 2. **Pipeline Real** (`verify_pipeline.py`): Procesa videos reales con la API de Gemini
 3. **Verificación de Sintaxis**: Scripts para validar la estructura del notebook
+4. **Tests del ValidatorAgent** (`tests/test_validator.py`): Validan la detección de
+   errores de sintaxis en bash, python y docker sin necesidad de API key:
+
+   ```bash
+   python -m unittest discover -s tests -v
+   # o con pytest, si está disponible:
+   pytest tests/ -v
+   ```
 
 ## 📚 Aprendizajes del Proyecto
 
