@@ -26,6 +26,7 @@ from .frames import FrameExtractor
 from .grounder import GeminiVideoGrounder
 from .mock import MockVideoGrounder
 from .pipeline import VideoGroundingPipeline
+from .adapters import to_grounded_transcript
 
 __all__ = [
     "ActionType",
@@ -39,6 +40,7 @@ __all__ = [
     "GeminiVideoGrounder",
     "MockVideoGrounder",
     "VideoGroundingPipeline",
+    "to_grounded_transcript",
 ]
 
 __version__ = "2.0.0"

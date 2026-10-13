@@ -94,6 +94,22 @@ Cada acción produce una sección de Markdown con su `[MM:SS]`, su captura
 incrustada, la descripción y (si aplica) el bloque de comando. Las acciones
 de tipo `error` añaden automáticamente una nota `WARNING`.
 
+## Contrato y frontera con otros agentes
+
+- **Contrato canónico del visor**: el frontend (`t_d110ce31`) consume
+  `video_grounding.schemas.VideoGroundingResult` directamente vía
+  `src/frontend/contract.py::normalize_grounding` (adaptador sin pydantic).
+  **Los nombres de campo son la frontera del visor sincronizado**: no cambiar
+  `GroundedAction` (`index`, `timestamp`, `timestamp_seconds`, `action_type`,
+  `title`, `description`, `command`), `FrameCapture` (`image_path`,
+  `action_index`) ni `VideoGroundingResult` (`video_path`, `duration_seconds`,
+  `title`, `summary`, `actions`, `frames`) sin avisar.
+- **Puente al RFC-002**: `video_grounding.adapters.to_grounded_transcript`
+  convierte un `VideoGroundingResult` en el `contracts.GroundedTranscript`
+  (sin cambiar los nombres de campo de grounding) para rellenar
+  `PipelineResult.grounding`. Es una función de compatibilidad, no un cambio
+  de contrato.
+
 ## Notas y decisiones
 
 - **Modelo por defecto**: `gemini-2.0-flash` (estable, multimodal con vídeo).

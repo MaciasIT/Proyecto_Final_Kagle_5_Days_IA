@@ -3,3 +3,4 @@ google-adk
 google-generativeai
 python-dotenv
 streamlit
+yt-dlp
