@@ -166,3 +166,7 @@ inspect_*.py
 help_*.py
 test_syntax.py
 verify_notebook_syntax*.py
+
+kaggle.json
+*.gemini_cache
+.venv/

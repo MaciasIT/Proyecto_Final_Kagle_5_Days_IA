@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "generated_by": "caos (F4 QA & Benchmarking)",
+  "generated_at": "2026-10-13",
+  "method": "OCR (tesseract) sobre fotogramas extraídos con ffmpeg + metadatos ffprobe. Ground truth verificable, no depende de ningún LLM.",
+  "videos": {
+    "sudo_pacman_update.webm": {
+      "description": "Grabación de terminal (1080p, 61.67 s) de una actualización completa de sistema en Arch Linux con pacman.",
+      "duration_seconds": 61.67,
+      "width": 1920,
+      "height": 1080,
+      "codec": "vp9",
+      "os": "Arch Linux",
+      "user": "vicfic",
+      "host": "ALG3",
+      "commands": [
+        "sudo pacman -Syu"
+      ],
+      "prompt_responses": [
+        "y"
+      ],
+      "packages_upgraded": [
+        {"name": "appstream", "version": "0.14.6-1"},
+        {"name": "chromium", "version": "94.0.4606.81-1"},
+        {"name": "flatpak", "version": "1.12.0-1"},
+        {"name": "ostree", "version": "2021.5-1"}
+      ],
+      "download_size_mib": "81.11",
+      "installed_size_mib": "257.53",
+      "net_upgrade_size_mib": "0.09",
+      "kernel": "5.14.9-arch2-1",
+      "initramfs": {
+        "tool": "mkinitcpio",
+        "images": ["/boot/initramfs-linux.img", "/boot/initramfs-linux-fallback.img"]
+      },
+      "firmware_warnings": ["wd719x", "aic94xx", "xhci_pci"],
+      "post_transaction_hooks": [
+        "Updating linux initcpios",
+        "Refreshing PackageKit",
+        "Reloading system bus configuration",
+        "Updating icon theme caches",
+        "Updating the appstream cache"
+      ]
+    },
+    "sample_video.mp4": {
+      "description": "Clip multimedia de 30 s (854x480, H264 + AAC 6 canales) SIN contenido de terminal en pantalla. Audio de tipo habla/música. Control negativo: un pipeline correcto NO debe extraer ningún comando técnico de este medio.",
+      "duration_seconds": 30.0,
+      "width": 854,
+      "height": 480,
+      "codec": "h264",
+      "audio_channels": 6,
+      "os": null,
+      "user": null,
+      "host": null,
+      "commands": [],
+      "packages_upgraded": [],
+      "kernel": null,
+      "firmware_warnings": [],
+      "expected_technical_facts": 0,
+      "note": "Ningún comando terminal, paquete, IP ni host es ground truth aquí. Cualquier comando que el pipeline atribuya a este vídeo cuenta como alucinación."
+    }
+  }
+}
