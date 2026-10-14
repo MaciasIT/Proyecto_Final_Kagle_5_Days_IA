@@ -7,12 +7,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 
-# Dependencias de sistema: ffmpeg (extracción de frames y timestamps), bash, curl para healthcheck
+# Dependencias de sistema: ffmpeg (extracción de frames y timestamps), bash, curl para healthcheck, libgomp1 para ctranslate2/faster-whisper
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     bash \
     curl \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /app/data
 
 # Instalación de paquetes Python
 COPY requirements.txt .

@@ -24,6 +24,7 @@ from .schemas import (
 )
 from .frames import FrameExtractor
 from .grounder import GeminiVideoGrounder
+from .audio_grounder import AudioVideoGrounder
 from .mock import MockVideoGrounder
 from .pipeline import VideoGroundingPipeline
 from .adapters import to_grounded_transcript
@@ -38,6 +39,7 @@ __all__ = [
     "format_timestamp",
     "FrameExtractor",
     "GeminiVideoGrounder",
+    "AudioVideoGrounder",
     "MockVideoGrounder",
     "VideoGroundingPipeline",
     "to_grounded_transcript",

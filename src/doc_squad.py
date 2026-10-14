@@ -1,146 +1,94 @@
+"""
+src.doc_squad — Pipeline de documentación técnica con agentes de IA.
+
+Doc Squad v2 (Agnóstico):
+  1. IngestAgent: Ingesta multimedia local (audio/vídeo con faster-whisper, asciinema, logs).
+  2. AnalystAgent: Extracción de hechos técnicos precisos mediante AgnosticLLMClient.
+  3. ValidatorAgent: Critic de coherencia + validador determinista de sintaxis de comandos.
+  4. TechWriterAgent: Generación de la documentación técnica final en Markdown.
+
+Eliminadas todas las dependencias propietarias de Google (google-adk, google-generativeai).
+"""
+
+from __future__ import annotations
+
+import asyncio
 import os
 import re
-import time
-import asyncio
-import google.generativeai as genai
-from google.adk.agents.llm_agent import Agent
-from google.adk.runners import InMemoryRunner
+from typing import Callable, Optional
+
 from dotenv import load_dotenv
 
-from src.validator import validate_facts, validate_syntax_tool
+from src.audio.transcriber import LocalTranscriber
+from src.llm.client import AgnosticLLMClient
+from src.validator import validate_facts
 
-# Número máximo de iteraciones del bucle de refinamiento (Analyst <-> Validator).
-MAX_REFINEMENTS = 3
-
-# Cargar variables de entorno
 load_dotenv()
 
-# Configurar API Key si existe
-if os.getenv("GOOGLE_API_KEY"):
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+MAX_REFINEMENTS = 3
 
-# --- TOOLS ---
-def ingest_multimedia_tool(file_path: str) -> str:
-    """
-    Sube un archivo a la API de Gemini y espera a que esté listo.
-    Retorna el URI del archivo o un mensaje de error.
-    """
-    if not os.path.exists(file_path):
-        return f"ERROR: El archivo {file_path} no existe en el sistema local."
 
-    print(f"[System] Subiendo {file_path}...")
-    try:
-        file_upload = genai.upload_file(file_path)
-        
-        # Esperar a que el archivo esté activo
-        while file_upload.state.name == "PROCESSING":
-            time.sleep(2)
-            file_upload = genai.get_file(file_upload.name)
+# --- PROMPTS DE AGENTES ---
 
-        if file_upload.state.name == "FAILED":
-            return "ERROR: Falló el procesamiento en Gemini."
+ANALYST_INSTRUCTION = """\
+Eres el AnalystAgent, un Ingeniero de Sistemas Senior.
+Tu trabajo es analizar el contenido técnico recibido (transcripción de audio/vídeo, comandos, logs o texto) y extraer TODOS los detalles técnicos reales.
+NO te preocupes por el formato final bonito ni la redacción literaria. Céntrate en la máxima precisión técnica.
 
-        return file_upload.uri
-    except Exception as e:
-        return f"ERROR CRÍTICO: {str(e)}"
+Debes extraer:
+- Comandos exactos ejecutados y sus parámetros.
+- Mensajes de error, advertencias o logs visibles.
+- Pasos de configuración realizados (ficheros editados, directivas).
+- Direcciones IP, nombres de host, puertos, paquetes y versiones.
 
-# --- AGENTS SETUP ---
-def create_squad():
-    """Inicializa y retorna los runners del Doc Squad."""
-    
-    # 1. INGEST AGENT
-    ingest_agent = Agent(
-        model='gemini-1.5-flash-001',
-        name='IngestAgent',
-        description="Gestiona la carga de archivos.",
-        instruction="""
-        Eres el IngestAgent. Tu único trabajo es recibir rutas de archivos locales y subirlos usando la herramienta 'ingest_multimedia_tool'.
-        Una vez tengas el URI, devuélvelo confirmando que está listo para análisis.
-        Si la herramienta falla, reporta el error claramente.
-        """,
-        tools=[ingest_multimedia_tool]
-    )
-    # FIX: Especificar app_name="agents" para evitar mismatch
-    ingest_runner = InMemoryRunner(agent=ingest_agent, app_name="agents")
+Salida esperada: Una lista cronológica y detallada de hechos técnicos crudos.
+"""
 
-    # 2. ANALYST AGENT
-    analyst_agent = Agent(
-        model='gemini-1.5-pro-001',
-        name='AnalystAgent',
-        description="Analiza contenido técnico y extrae hechos.",
-        instruction="""
-        Eres el AnalystAgent, un Ingeniero de Sistemas Senior.
-        Tu trabajo es recibir un URI de archivo (video, audio, imagen) y extraer TODOS los detalles técnicos.
-        NO te preocupes por el formato bonito. Céntrate en la precisión.
-        
-        Debes extraer:
-        - Comandos exactos ejecutados.
-        - Mensajes de error o logs visibles.
-        - Pasos de configuración realizados.
-        - Direcciones IP, nombres de host, puertos.
-        
-        Salida esperada: Una lista de hechos técnicos crudos y cronológicos.
-        """
-    )
-    analyst_runner = InMemoryRunner(agent=analyst_agent, app_name="agents")
+VALIDATOR_INSTRUCTION = """\
+Eres el ValidatorAgent, un revisor técnico senior (Critic).
+Tu trabajo es revisar los hechos técnicos extraídos por el AnalystAgent y detectar problemas ANTES de redactar el documento final.
+No redactas la guía, solo juzgas si los hechos son técnicamente consistentes y correctos.
 
-    # 3. TECH WRITER AGENT
-    tech_writer_agent = Agent(
-        model='gemini-1.5-pro-001',
-        name='TechWriterAgent',
-        description="Genera documentación final.",
-        instruction="""
-        Eres el TechWriterAgent. Recibes una lista de hechos técnicos de un analista.
-        Tu trabajo es convertir esos hechos en un documento profesional (Markdown).
-        
-        Estructura requerida:
-        1. Título Descriptivo.
-        2. Resumen Ejecutivo (1 párrafo).
-        3. Prerrequisitos (si los hay).
-        4. Procedimiento Paso a Paso (numerado).
-        5. Solución de Problemas (si aplica).
-        
-        Usa bloques de código para comandos. Añade notas de advertencia (WARNING) si ves algo peligroso.
-        Tu tono debe ser formal, claro y directo.
-        """
-    )
-    tech_writer_runner = InMemoryRunner(agent=tech_writer_agent, app_name="agents")
+Revisa:
+- Inconsistencias técnicas o comandos contradictorios.
+- Comandos que no corresponden a la distribución o sistema descrito.
+- Comandos peligrosos que requieran advertencias.
 
-    # 4. VALIDATOR AGENT (Critic & Code Syntax Check)
-    validator_agent = Agent(
-        model='gemini-1.5-flash-001',
-        name='ValidatorAgent',
-        description="Crítico técnico que valida hechos y sintaxis de comandos.",
-        instruction="""
-        Eres el ValidatorAgent, un revisor técnico senior (Critic).
+Formato de respuesta OBLIGATORIO:
+Si todo es correcto:
+VEREDICTO: VÁLIDO
 
-        Tu trabajo es revisar los hechos técnicos extraídos por el AnalystAgent y
-        detectar problemas ANTES de que se redacte el documento final. No redactas
-        documentación: solo juzgas si los hechos son correctos y consistentes.
+Si hay problemas o inconsistencias:
+VEREDICTO: REVISAR
+1. <problema concreto y cómo corregirlo>
+2. <siguiente problema>
+"""
 
-        Debes revisar:
-        - Sintaxis de comandos (bash, docker, python): usa la herramienta
-          'validate_syntax_tool' pasándole el texto completo de los hechos.
-        - Inconsistencias técnicas: comandos que no corresponden al sistema
-          operativo descrito, pasos faltantes, órdenes contradictorias o
-          referencias a recursos inexistentes.
-        - Comandos peligrosos que merezcan una advertencia.
+TECH_WRITER_INSTRUCTION = """\
+Eres el TechWriterAgent. Recibes una lista de hechos técnicos validados.
+Tu trabajo es convertir esos hechos en un documento técnico profesional en Markdown.
 
-        Formato de respuesta OBLIGATORIO (respeta la primera línea al pie de la letra):
-        VEREDICTO: VÁLIDO
-        (si todo es correcto)
+Estructura requerida:
+# [Título Descriptivo y Claro]
 
-        VEREDICTO: REVISAR
-        1. <problema concreto y accionable>
-        2. <otro problema>
-        (si hay algo que corregir; enumera cada problema de forma específica para
-        que el AnalystAgent pueda corregirlo sin ambigüedad)
-        """,
-        tools=[validate_syntax_tool]
-    )
-    validator_runner = InMemoryRunner(agent=validator_agent, app_name="agents")
+## Resumen Ejecutivo
+(1 párrafo conciso explicando el objetivo y resultado del procedimiento)
 
-    return ingest_runner, analyst_runner, tech_writer_runner, validator_runner
+## Prerrequisitos
+- Requisitos de software, permisos (sudo/root), dependencias o paquetes necesarios.
+
+## Procedimiento Paso a Paso
+1. **Paso 1**: Explicación clara.
+   ```bash
+   comando exacto
+   ```
+2. **Paso 2**: Siguiente paso.
+
+## Solución de Problemas y Consideraciones
+- Errores comunes observados o advertencias (WARNING) de seguridad si aplica.
+
+Usa bloques de código con resaltado sintáctico. Tono formal, claro y directo.
+"""
 
 
 # --- HELPERS DE VALIDACIÓN Y REFINAMIENTO ---
@@ -151,7 +99,6 @@ def _parse_verdict(critic_text: str) -> str:
     if match:
         token = match.group(1).upper()
         return "VÁLIDO" if token in {"VÁLIDO", "VALIDO", "OK", "APROBADO"} else "REVISAR"
-    # Fallback: si menciona problemas, asumimos que hay que revisar.
     upper = critic_text.upper()
     if "REVISAR" in upper or "PROBLEMA" in upper or "ERROR" in upper:
         return "REVISAR"
@@ -159,7 +106,7 @@ def _parse_verdict(critic_text: str) -> str:
 
 
 def _build_feedback(syntax_report, critic_text: str) -> str:
-    """Compone el feedback de refinamiento (sintaxis + observaciones del critic)."""
+    """Compone el feedback de refinamiento (sintaxis + critic)."""
     parts = []
     if not syntax_report.ok:
         parts.append(
@@ -169,82 +116,172 @@ def _build_feedback(syntax_report, critic_text: str) -> str:
     parts.append("OBSERVACIONES DEL CRÍTICO:\n" + critic_text.strip())
     return "\n\n".join(parts)
 
-# --- PIPELINE FUNCTION (ASYNC) ---
-async def run_pipeline_async(file_path: str, request_context: str, status_callback):
-    ingest_runner, analyst_runner, tech_writer_runner, validator_runner = create_squad()
-    
-    def update_status(msg):
+
+def _extract_media_text(file_path: str, transcriber: LocalTranscriber) -> str:
+    """Extrae texto del archivo según su tipo (audio/vídeo vía faster-whisper o texto plano)."""
+    if not os.path.exists(file_path):
+        return f"[Archivo no encontrado: {file_path}]"
+
+    ext = os.path.splitext(file_path)[1].lower()
+    video_exts = {".mp4", ".webm", ".mkv", ".mov", ".avi"}
+    audio_exts = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".opus"}
+    text_exts = {".txt", ".log", ".md", ".cast", ".json"}
+
+    if ext in video_exts:
+        try:
+            segments = transcriber.transcribe_video(file_path)
+            lines = [f"[{s['start_ms']//1000}s] {s['text']}" for s in segments if s.get("text")]
+            return "\n".join(lines) if lines else f"[Vídeo sin pista de audio legible: {os.path.basename(file_path)}]"
+        except Exception as e:
+            return f"[Error al transcribir vídeo: {e}]"
+
+    elif ext in audio_exts:
+        try:
+            segments = transcriber.transcribe(file_path)
+            lines = [f"[{s['start_ms']//1000}s] {s['text']}" for s in segments if s.get("text")]
+            return "\n".join(lines) if lines else f"[Audio vacío o no legible: {os.path.basename(file_path)}]"
+        except Exception as e:
+            return f"[Error al transcribir audio: {e}]"
+
+    elif ext in text_exts:
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except Exception as e:
+            return f"[Error al leer fichero de texto: {e}]"
+
+    return f"[Archivo multimedia procesado: {os.path.basename(file_path)}]"
+
+
+# --- PIPELINE ASÍNCRONO ---
+
+async def run_pipeline_async(
+    file_path: str,
+    request_context: str = "",
+    status_callback: Optional[Callable[[str], None]] = None,
+    llm_client: Optional[AgnosticLLMClient] = None,
+    transcriber: Optional[LocalTranscriber] = None,
+) -> str:
+    """Ejecuta el pipeline Doc Squad v2 de forma asíncrona y agnóstica."""
+    client = llm_client or AgnosticLLMClient()
+    local_transcriber = transcriber or LocalTranscriber()
+
+    def update_status(msg: str):
         if status_callback:
             status_callback(msg)
         else:
             print(msg)
 
-    update_status(f"🚀 Iniciando pipeline para: {os.path.basename(file_path)}")
-    
-    # PASO 1: INGESTA
-    update_status("🤖 IngestAgent: Subiendo y procesando archivo...")
-    # Usamos run() que devuelve la respuesta final directamente (simplificado) o run_debug para eventos
-    # Para simplificar en producción usamos run() que devuelve una respuesta
-    ingest_response = await ingest_runner.run(f"Sube y procesa el archivo: {file_path}")
-    update_status("✅ IngestAgent: Archivo listo.")
-    
-    # PASO 2: ANÁLISIS
-    update_status("🤖 AnalystAgent: Analizando contenido técnico...")
-    analysis_prompt = f"Aquí tienes el resultado de la ingesta: {ingest_response.text}. Contexto extra: {request_context}. Analiza los hechos técnicos."
-    facts = await analyst_runner.run(analysis_prompt)
+    filename = os.path.basename(file_path)
+    update_status(f"🚀 Iniciando pipeline Doc Squad para: {filename}")
+
+    # PASO 1: INGESTA MULTIMEDIA
+    update_status("🤖 IngestAgent: Procesando contenido...")
+    raw_content = _extract_media_text(file_path, local_transcriber)
+    update_status("✅ IngestAgent: Contenido extraído.")
+
+    # PASO 2: ANÁLISIS TÉCNICO
+    update_status("🤖 AnalystAgent: Extrayendo hechos técnicos...")
+    analysis_prompt = (
+        f"Contenido del archivo '{filename}':\n\n{raw_content}\n\n"
+        f"Contexto adicional proporcionado por el usuario:\n{request_context or 'Ninguno'}\n\n"
+        "Extrae todos los hechos técnicos de manera cronológica y precisa."
+    )
+    facts_text = await client.generate_text(
+        prompt=analysis_prompt,
+        system_prompt=ANALYST_INSTRUCTION,
+        temperature=0.2,
+    )
     update_status("✅ AnalystAgent: Hechos extraídos.")
 
-    # PASO 3: VALIDACIÓN + BUCLE DE REFINAMIENTO (ValidatorAgent <-> AnalystAgent)
-    final_facts = facts.text
+    # PASO 3: VALIDACIÓN Y BUCLE DE REFINAMIENTO (ValidatorAgent <-> AnalystAgent)
+    final_facts = facts_text
     for iteration in range(MAX_REFINEMENTS + 1):
         update_status(f"🤖 ValidatorAgent: Validando hechos (iteración {iteration + 1}/{MAX_REFINEMENTS + 1})...")
 
-        # 3a. Verificación determinista de sintaxis de comandos.
+        # 3a. Chequeo sintáctico determinista
         syntax_report = validate_facts(final_facts)
 
-        # 3b. Crítico LLM: detección de inconsistencias técnicas.
+        # 3b. Critic LLM
         critic_prompt = (
-            "Revisa los siguientes hechos técnicos extraídos por el AnalystAgent y "
-            "detecta inconsistencias técnicas o errores.\n\n"
-            f"INFORME DE SINTAXIS (ya comprobado de forma determinista):\n{syntax_report.to_text()}\n\n"
+            "Revisa los siguientes hechos técnicos extraídos y evalúa su coherencia técnica:\n\n"
+            f"INFORME DE SINTAXIS (determinista):\n{syntax_report.to_text()}\n\n"
             f"HECHOS TÉCNICOS:\n{final_facts}\n"
         )
-        critic_response = await validator_runner.run(critic_prompt)
-        verdict = _parse_verdict(critic_response.text)
+        critic_text = await client.generate_text(
+            prompt=critic_prompt,
+            system_prompt=VALIDATOR_INSTRUCTION,
+            temperature=0.1,
+        )
+        verdict = _parse_verdict(critic_text)
 
         if syntax_report.ok and verdict == "VÁLIDO":
-            update_status("✅ ValidatorAgent: Hechos validados, sin problemas.")
+            update_status("✅ ValidatorAgent: Hechos validados, sin inconsistencias.")
             break
 
         update_status(
-            f"🔁 ValidatorAgent: {len(syntax_report.errors)} error(es) de sintaxis y/o "
-            f"inconsistencias detectadas; refinando..."
+            f"🔁 ValidatorAgent: {len(syntax_report.errors)} error(es) de sintaxis o inconsistencias detectadas; refinando..."
         )
 
         if iteration >= MAX_REFINEMENTS:
-            update_status("⚠️ ValidatorAgent: máximo de iteraciones alcanzado; se continúa con el mejor resultado.")
+            update_status("⚠️ ValidatorAgent: Máximo de iteraciones alcanzado; continuando con el mejor resultado.")
             break
 
-        feedback = _build_feedback(syntax_report, critic_response.text)
-        refined = await analyst_runner.run(
-            "Tu análisis previo tiene problemas que debes corregir. Devuelve una "
-            "versión CORREGIDA y COMPLETA de los hechos técnicos.\n\n"
-            f"{feedback}\n"
+        feedback = _build_feedback(syntax_report, critic_text)
+        refine_prompt = (
+            "Tu análisis previo contiene problemas o inconsistencias técnicas que debes corregir.\n\n"
+            f"{feedback}\n\n"
+            "Devuelve una versión CORREGIDA, COMPLETA y PRECISA de los hechos técnicos."
         )
-        final_facts = refined.text
-        update_status("✅ AnalystAgent: Hechos refinados.")
+        final_facts = await client.generate_text(
+            prompt=refine_prompt,
+            system_prompt=ANALYST_INSTRUCTION,
+            temperature=0.2,
+        )
+        update_status("✅ AnalystAgent: Hechos corregidos.")
 
-    # PASO 4: REDACCIÓN
-    update_status("🤖 TechWriterAgent: Redactando documento final...")
-    writer_prompt = f"Aquí tienes los hechos técnicos extraídos: \n{final_facts}\n. Genera el documento final."
-    final_doc = await tech_writer_runner.run(writer_prompt)
-    update_status("✅ TechWriterAgent: Documento generado.")
-    
-    return final_doc.text
+    # PASO 4: REDACCIÓN DE DOCUMENTACIÓN
+    update_status("🤖 TechWriterAgent: Redactando documentación final...")
+    writer_prompt = (
+        f"Archivo de origen: {filename}\n"
+        f"Contexto del usuario: {request_context or 'Ninguno'}\n\n"
+        f"Hechos técnicos validados:\n{final_facts}\n\n"
+        "Redacta el documento técnico final completo en Markdown siguiendo la estructura requerida."
+    )
+    final_doc = await client.generate_text(
+        prompt=writer_prompt,
+        system_prompt=TECH_WRITER_INSTRUCTION,
+        temperature=0.3,
+    )
+    update_status("✅ TechWriterAgent: Documentación final generada.")
 
-# --- WRAPPER SÍNCRONO PARA APP.PY ---
-def run_documentation_pipeline(file_path: str, request_context: str = "", status_callback=None):
-    """
-    Wrapper síncrono para ejecutar el pipeline async.
-    """
-    return asyncio.run(run_pipeline_async(file_path, request_context, status_callback))
+    return final_doc
+
+
+# --- WRAPPER SÍNCRONO PARA STREAMLIT / SCRIPTS ---
+
+def run_documentation_pipeline(
+    file_path: str,
+    request_context: str = "",
+    status_callback: Optional[Callable[[str], None]] = None,
+    llm_client: Optional[AgnosticLLMClient] = None,
+    transcriber: Optional[LocalTranscriber] = None,
+) -> str:
+    """Wrapper síncrono para ejecutar el pipeline asíncrono."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if loop.is_running():
+        # Si ya hay un event loop corriendo (ej. en ciertas versiones de Streamlit o Jupyter)
+        import nest_asyncio
+        nest_asyncio.apply()
+        return loop.run_until_complete(
+            run_pipeline_async(file_path, request_context, status_callback, llm_client, transcriber)
+        )
+    else:
+        return loop.run_until_complete(
+            run_pipeline_async(file_path, request_context, status_callback, llm_client, transcriber)
+        )

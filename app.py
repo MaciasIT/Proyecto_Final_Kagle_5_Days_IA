@@ -1,145 +1,318 @@
-import streamlit as st
+"""
+app.py — Interfaz Streamlit para Doc Squad AI v2.
+
+Incluye:
+  1. Autenticación de usuarios por invitación (SQLite + bcrypt).
+  2. Panel de administración para generación de códigos de invitación de un solo uso.
+  3. Selector de motor LLM agnóstico (SambaNova, Cerebras, Nous, FreeLLMAPI, Ollama, OpenAI).
+  4. Pipeline multi-agente de documentación técnica sin dependencias de Google.
+"""
+
+from __future__ import annotations
+
 import os
 import tempfile
+import streamlit as st
 from dotenv import load_dotenv
-from src.doc_squad import run_documentation_pipeline
-import google.generativeai as genai
 
-# Configuración de la página
+from src.auth.db import init_db
+from src.auth.service import (
+    create_invitation,
+    is_admin,
+    list_invitations,
+    login_user,
+    register_user,
+    user_count,
+)
+from src.doc_squad import run_documentation_pipeline
+from src.llm.client import AgnosticLLMClient, resolve_provider_config
+
+load_dotenv()
+
+# Inicializar tablas de SQLite si no existen
+init_db()
+
+# Configuración de página
 st.set_page_config(
     page_title="Doc Squad AI",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Estilos CSS personalizados
+# Estilos CSS
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
-        color: #4285F4;
+        font-size: 2.3rem;
+        color: #1E88E5;
         text-align: center;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
     }
     .sub-header {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         color: #666;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .auth-card {
+        background-color: #f8f9fa;
+        padding: 2rem;
+        border-radius: 0.8rem;
+        border: 1px solid #e0e0e0;
+        max-width: 500px;
+        margin: auto;
     }
     .stButton>button {
-        width: 100%;
-        background-color: #4285F4;
-        color: white;
-    }
-    .status-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #f0f2f6;
-        margin-bottom: 1rem;
+        border-radius: 0.4rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar
+
+# ==============================================================================
+# GESTIÓN DE SESIÓN Y AUTENTICACIÓN
+# ==============================================================================
+
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = None
+if "role" not in st.session_state:
+    st.session_state["role"] = None
+
+
+def render_auth_view():
+    """Renderiza la vista de autenticación (Login / Registro con Invitación)."""
+    st.markdown('<h1 class="main-header">🤖 Doc Squad AI</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Acceso restringido — Inicia sesión o regístrate con tu invitación.</p>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        total_users = user_count()
+
+        if total_users == 0:
+            st.warning("👑 **Primer inicio detectado**: No hay ningún usuario registrado. La primera cuenta que crees será el **Administrador** del sistema.")
+            with st.form("admin_register_form"):
+                admin_user = st.text_input("Usuario Administrador", placeholder="ej. michel")
+                admin_pass = st.text_input("Contraseña", type="password")
+                admin_pass_confirm = st.text_input("Confirmar Contraseña", type="password")
+                submit_admin = st.form_submit_button("Crear Administrador", use_container_width=True)
+
+                if submit_admin:
+                    if not admin_user or not admin_pass:
+                        st.error("Por favor, introduce usuario y contraseña.")
+                    elif admin_pass != admin_pass_confirm:
+                        st.error("Las contraseñas no coinciden.")
+                    else:
+                        try:
+                            user_data = register_user(admin_user.strip(), admin_pass)
+                            st.session_state["authenticated"] = True
+                            st.session_state["username"] = user_data["username"]
+                            st.session_state["role"] = user_data["role"]
+                            st.success("¡Administrador registrado exitosamente!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al registrar: {e}")
+            return
+
+        # Pestañas Login y Registro con Invitación
+        tab_login, tab_register = st.tabs(["🔑 Iniciar Sesión", "✉️ Registrarse con Invitación"])
+
+        with tab_login:
+            with st.form("login_form"):
+                login_username = st.text_input("Usuario")
+                login_password = st.text_input("Contraseña", type="password")
+                submit_login = st.form_submit_button("Entrar", use_container_width=True)
+
+                if submit_login:
+                    user_info = login_user(login_username.strip(), login_password)
+                    if user_info:
+                        st.session_state["authenticated"] = True
+                        st.session_state["username"] = user_info["username"]
+                        st.session_state["role"] = user_info["role"]
+                        st.success(f"Bienvenido, {user_info['username']}!")
+                        st.rerun()
+                    else:
+                        st.error("Credenciales incorrectas o usuario no encontrado.")
+
+        with tab_register:
+            with st.form("register_form"):
+                reg_username = st.text_input("Nombre de Usuario deseado")
+                reg_password = st.text_input("Contraseña", type="password")
+                reg_code = st.text_input("Código de Invitación", placeholder="Pega aquí el código que te enviaron")
+                submit_register = st.form_submit_button("Registrarse", use_container_width=True)
+
+                if submit_register:
+                    if not reg_username or not reg_password or not reg_code:
+                        st.error("Todos los campos son obligatorios.")
+                    else:
+                        try:
+                            new_user = register_user(reg_username.strip(), reg_password, reg_code.strip())
+                            st.success("¡Cuenta creada correctamente! Ahora puedes iniciar sesión.")
+                        except Exception as e:
+                            st.error(f"No se pudo registrar: {e}")
+
+
+if not st.session_state["authenticated"]:
+    render_auth_view()
+    st.stop()
+
+
+# ==============================================================================
+# VISTA PRINCIPAL (USUARIO AUTENTICADO)
+# ==============================================================================
+
+current_user = st.session_state["username"]
+current_role = st.session_state["role"]
+
+# --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg", width=50)
-    st.title("Configuración")
-    
-    # API Key management
-    load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
-    
-    if not api_key:
-        user_api_key = st.text_input("Google API Key", type="password", help="Introduce tu API Key de Google AI Studio")
-        if user_api_key:
-            os.environ["GOOGLE_API_KEY"] = user_api_key
-            genai.configure(api_key=user_api_key)
-            st.success("API Key configurada!")
-    else:
-        st.success("✅ API Key detectada en .env")
+    st.markdown(f"### 👤 {current_user}")
+    role_badge = "🛡️ **Administrador**" if current_role == "admin" else "👥 **Invitado / Familia**"
+    st.markdown(role_badge)
+
+    if st.button("Cerrar Sesión", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = None
+        st.session_state["role"] = None
+        st.rerun()
 
     st.markdown("---")
-    st.markdown("### 🤖 Doc Squad")
-    st.markdown("- **IngestAgent**: Procesa multimedia")
-    st.markdown("- **AnalystAgent**: Extrae datos técnicos")
-    st.markdown("- **ValidatorAgent**: Valida sintaxis y coherencia")
-    st.markdown("- **TechWriterAgent**: Escribe documentación")
-    
-    st.markdown("---")
-    st.markdown("Created by [Michel Macias](https://github.com/Michel-Macias)")
 
-# Main Content
+    # PANEL DE ADMINISTRACIÓN DE INVITACIONES
+    if current_role == "admin":
+        st.markdown("### ✉️ Invitaciones Familiares")
+        with st.expander("Generar nueva invitación", expanded=False):
+            exp_hours = st.slider("Validez (horas)", min_value=12, max_value=168, value=72, step=12)
+            if st.button("Generar Código", use_container_width=True):
+                try:
+                    code = create_invitation(created_by=current_user, role="user", expires_hours=exp_hours)
+                    st.success("¡Código generado! Cópialo:")
+                    st.code(code, language="text")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        with st.expander("Ver invitaciones emitidas", expanded=False):
+            invs = list_invitations(created_by=current_user)
+            if invs:
+                for inv in invs[:8]:
+                    status_icon = "🟢" if inv["status"] == "active" else ("🔴" if inv["status"] == "used" else "⚪")
+                    st.caption(f"{status_icon} `{inv['code'][:8]}...` | Estado: {inv['status']} | Usado por: {inv['used_by'] or 'Nadie'}")
+            else:
+                st.caption("No hay invitaciones creadas aún.")
+
+        st.markdown("---")
+
+    # CONFIGURACIÓN DEL MOTOR LLM
+    st.markdown("### 🧠 Motor LLM Agnóstico")
+    provider_options = {
+        "SambaNova (Llama 3.3 70B Cloud)": "sambanova",
+        "Cerebras (Llama 3.3 70B Cloud)": "cerebras",
+        "Nous Research (Hermes 3 Cloud)": "nous",
+        "FreeLLMAPI (Local:3001)": "freellmapi",
+        "Ollama (Local:11434)": "ollama",
+        "OpenAI Oficial": "openai",
+    }
+    selected_label = st.selectbox(
+        "Proveedor LLM activo",
+        list(provider_options.keys()),
+        index=0,
+    )
+    provider_key = provider_options[selected_label]
+
+    # Resolver configuración y comprobar API key
+    llm_cfg = resolve_provider_config(provider_key)
+    custom_api_key = None
+    if not llm_cfg.api_key or llm_cfg.api_key == "sk-dummy-key":
+        custom_api_key = st.text_input(f"API Key para {provider_key.capitalize()}", type="password", help="Introduce tu API key o configúrala en .env")
+        if custom_api_key:
+            llm_cfg.api_key = custom_api_key
+
+    # Instanciar cliente LLM para la sesión
+    llm_client = AgnosticLLMClient(config=llm_cfg)
+    st.success(f"✅ Conectado a **{provider_key.upper()}** (`{llm_cfg.model}`)")
+
+    st.markdown("---")
+    st.markdown("### 🎙️ Audio STT Local")
+    st.caption("Faster-Whisper (int8 en CPU i5-10400) activo.")
+
+
+# --- CONTENIDO PRINCIPAL ---
 st.markdown('<h1 class="main-header">🤖 Doc Squad AI</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Transforma videos y audios técnicos en documentación profesional automáticamente.</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Documentación técnica automatizada a partir de grabaciones, vídeos, audios y terminales.</p>', unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 1])
+col_input, col_output = st.columns([1, 1])
 
-with col1:
-    st.markdown("### 1. Sube tu archivo")
-    uploaded_file = st.file_uploader("Elige un video, audio o imagen", type=['mp4', 'webm', 'mp3', 'wav', 'png', 'jpg'])
-    
-    context = st.text_area("Contexto adicional (Opcional)", 
-                          placeholder="Ej: Este es un tutorial sobre cómo instalar Apache en Ubuntu...",
-                          height=100)
+with col_input:
+    st.markdown("### 1. Selecciona el recurso")
+    uploaded_file = st.file_uploader(
+        "Sube un archivo técnico",
+        type=['mp4', 'webm', 'mp3', 'wav', 'cast', 'txt', 'log', 'md'],
+        help="Soporta vídeos, pistas de audio, sesiones asciinema y logs de terminal.",
+    )
 
-    generate_btn = st.button("Generar Documentación", type="primary", disabled=not uploaded_file)
+    context = st.text_area(
+        "Contexto adicional u objetivo (Opcional)",
+        placeholder="Ej: Tutorial de despliegue de PostgreSQL en Debian 12...",
+        height=100,
+    )
 
-with col2:
-    st.markdown("### 2. Resultado")
+    generate_btn = st.button("🚀 Generar Documentación", type="primary", disabled=not uploaded_file, use_container_width=True)
+
+with col_output:
+    st.markdown("### 2. Documentación Generada")
     output_container = st.empty()
-    
+
     if generate_btn and uploaded_file:
-        if not os.getenv("GOOGLE_API_KEY"):
-            st.error("⚠️ Por favor configura tu Google API Key en la barra lateral.")
-        else:
-            # Guardar archivo temporalmente
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-                tmp_file.write(uploaded_file.getvalue())
-                tmp_path = tmp_file.name
+        suffix = f".{uploaded_file.name.split('.')[-1]}"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
 
-            try:
-                # Contenedor para logs en tiempo real
-                status_container = st.container()
-                
-                def update_ui_status(msg):
-                    with status_container:
-                        if "IngestAgent" in msg:
-                            st.info(msg, icon="📥")
-                        elif "AnalystAgent" in msg:
-                            st.info(msg, icon="🧠")
-                        elif "ValidatorAgent" in msg and "🔁" in msg:
-                            st.warning(msg, icon="🔍")
-                        elif "ValidatorAgent" in msg:
-                            st.info(msg, icon="🔍")
-                        elif "TechWriterAgent" in msg:
-                            st.info(msg, icon="✍️")
-                        elif "✅" in msg:
-                            st.success(msg)
-                        else:
-                            st.write(msg)
+        try:
+            status_container = st.container()
 
-                with st.spinner('El Doc Squad está trabajando... Esto puede tardar unos minutos.'):
-                    final_doc = run_documentation_pipeline(tmp_path, context, status_callback=update_ui_status)
-                
-                # Mostrar resultado final
-                output_container.markdown(final_doc)
-                
-                # Botón de descarga
-                st.download_button(
-                    label="Descargar Markdown",
-                    data=final_doc,
-                    file_name="documentacion_generada.md",
-                    mime="text/markdown"
+            def update_ui_status(msg: str):
+                with status_container:
+                    if "IngestAgent" in msg:
+                        st.info(msg, icon="📥")
+                    elif "AnalystAgent" in msg:
+                        st.info(msg, icon="🧠")
+                    elif "ValidatorAgent" in msg and "🔁" in msg:
+                        st.warning(msg, icon="🔍")
+                    elif "ValidatorAgent" in msg:
+                        st.info(msg, icon="🔍")
+                    elif "TechWriterAgent" in msg:
+                        st.info(msg, icon="✍️")
+                    elif "✅" in msg:
+                        st.success(msg)
+                    else:
+                        st.write(msg)
+
+            with st.spinner("El Doc Squad está procesando el archivo con el modelo agnóstico..."):
+                final_doc = run_documentation_pipeline(
+                    file_path=tmp_path,
+                    request_context=context,
+                    status_callback=update_ui_status,
+                    llm_client=llm_client,
                 )
-                
-            except Exception as e:
-                st.error(f"Ocurrió un error: {str(e)}")
-            finally:
-                # Limpiar archivo temporal
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+
+            output_container.markdown(final_doc)
+
+            st.download_button(
+                label="📥 Descargar Documentación (Markdown)",
+                data=final_doc,
+                file_name=f"docs_{uploaded_file.name.split('.')[0]}.md",
+                mime="text/markdown",
+                use_container_width=True,
+            )
+
+        except Exception as e:
+            st.error(f"Ocurrió un error en el pipeline: {str(e)}")
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     elif not uploaded_file:
-        output_container.info("👈 Sube un archivo para comenzar.")
+        output_container.info("👈 Sube un archivo para comenzar la documentación.")

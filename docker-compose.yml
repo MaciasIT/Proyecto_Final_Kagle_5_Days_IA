@@ -9,8 +9,18 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-sambanova}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - SAMBANOVA_API_KEY=${SAMBANOVA_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - NOUS_API_KEY=${NOUS_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DATA_DIR=/app/data
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
     volumes:
+      - ./data:/app/data
       - ./test_data:/app/test_data:ro
