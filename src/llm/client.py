@@ -85,6 +85,7 @@ def resolve_provider_config(
     base_url: str | None = None,
     api_key: str | None = None,
     model: str | None = None,
+    require_api_key: bool = True,
 ) -> ProviderConfig:
     """Resuelve la configuración de un proveedor LLM combinando parámetros y variables de entorno.
 
@@ -121,10 +122,12 @@ def resolve_provider_config(
         )
 
         if not resolved_api_key:
-            raise ValueError(
-                f"Falta la clave de API para el proveedor '{normalized_name}'. "
-                f"Establece la variable de entorno '{spec['env']}' o 'LLM_API_KEY'."
-            )
+            if require_api_key:
+                raise ValueError(
+                    f"Falta la clave de API para el proveedor '{normalized_name}'. "
+                    f"Establece la variable de entorno '{spec['env']}' o 'LLM_API_KEY'."
+                )
+            resolved_api_key = ""
 
         return ProviderConfig(
             name=normalized_name,

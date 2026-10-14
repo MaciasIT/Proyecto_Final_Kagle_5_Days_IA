@@ -222,16 +222,29 @@ with st.sidebar:
     provider_key = provider_options[selected_label]
 
     # Resolver configuración y comprobar API key
-    llm_cfg = resolve_provider_config(provider_key)
+    try:
+        llm_cfg = resolve_provider_config(provider_key, require_api_key=False)
+    except Exception:
+        llm_cfg = ProviderConfig(name=provider_key, base_url="https://api.openai.com/v1", api_key="", model="default")
+
     custom_api_key = None
     if not llm_cfg.api_key or llm_cfg.api_key == "sk-dummy-key":
-        custom_api_key = st.text_input(f"API Key para {provider_key.capitalize()}", type="password", help="Introduce tu API key o configúrala en .env")
+        custom_api_key = st.text_input(
+            f"API Key para {provider_key.capitalize()}",
+            type="password",
+            help="Introduce tu API key o configúrala en .env / Secrets de Streamlit",
+            key=f"api_key_input_{provider_key}",
+        )
         if custom_api_key:
-            llm_cfg.api_key = custom_api_key
+            llm_cfg.api_key = custom_api_key.strip()
 
-    # Instanciar cliente LLM para la sesión
-    llm_client = AgnosticLLMClient(config=llm_cfg)
-    st.success(f"✅ Conectado a **{provider_key.upper()}** (`{llm_cfg.model}`)")
+    # Instanciar cliente LLM para la sesión si la clave está disponible
+    if not llm_cfg.api_key or llm_cfg.api_key == "sk-dummy-key":
+        st.warning(f"⚠️ Introduce tu API Key de {provider_key.capitalize()} en el campo superior.")
+        llm_client = None
+    else:
+        llm_client = AgnosticLLMClient(config=llm_cfg)
+        st.success(f"✅ Conectado a **{provider_key.upper()}** (`{llm_cfg.model}`)")
 
     st.markdown("---")
     st.markdown("### 🎙️ Audio STT Local")
@@ -265,6 +278,10 @@ with col_output:
     output_container = st.empty()
 
     if generate_btn and uploaded_file:
+        if not llm_client:
+            st.error("⚠️ Configura la API Key del proveedor en la barra lateral antes de continuar.")
+            st.stop()
+
         suffix = f".{uploaded_file.name.split('.')[-1]}"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
